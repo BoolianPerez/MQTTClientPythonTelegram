@@ -15,7 +15,7 @@ MQTT_TOPIC_SUBSCRIBE = "kids/yolo"
 MQTT_TOPIC_PUBLISH = "pong"
 
 # Telegram Bot token
-TELEGRAM_BOT_TOKEN = "7484892111:AAFJoYCk66dzNE7gB-l0QQEXTXS1z6R5o28"
+TELEGRAM_BOT_TOKEN = "Enter your telegram token here"
 
 # Global variables
 chat_id = None

@@ -1,4 +1,4 @@
-#!/home/franco/programamqtt/mosquitto-python-example/bin/python
+#!/home/luna/MQTTClientPythonTelegram/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

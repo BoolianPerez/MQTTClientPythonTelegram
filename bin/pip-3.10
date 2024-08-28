@@ -1,4 +1,6 @@
-#!/home/luna/MQTTClientPythonTelegram/bin/python
+#!/bin/sh
+'''exec' "/home/noanda/Descargas/MQTTClientPythonTelegram 1/bin/python" "$0" "$@"
+' '''
 # -*- coding: utf-8 -*-
 import re
 import sys

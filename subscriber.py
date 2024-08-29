@@ -9,7 +9,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 # MQTT configuration
-MQTT_BROKER = "172.16.4.230"
+MQTT_BROKER = "172.16.4.251"
 MQTT_PORT = 1883
 MQTT_USERNAME = "beans"  # Añade tu nombre de usuario aquí
 MQTT_PASSWORD = "rango"  # Añade tu contraseña aquí
@@ -35,9 +35,12 @@ def on_message(client, userdata, msg):
     print(msg.payload.decode('utf-8'))
     global application, chat_id
     telegram_message = f"Topic: {msg.topic}\nMessage: {msg.payload.decode('utf-8')}"
-    if chat_id:
-        asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=chat_id, text=telegram_message), loop)
     logging.info(f"MQTT Message: {telegram_message}")
+
+    for enchufe in enchufes:
+        if enchufe.topico == msg.topic:
+            enchufe.estado = msg.payload.decode('utf-8').strip() == "ON"
+            break
 
 # MQTT Client setup
 mqtt_client = paho.Client()
@@ -67,11 +70,12 @@ async def start(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text('Menu', reply_markup=menu_markup)
 
 class Enchufe:
-    def __init__(self, nombre, topico) -> None:
+    def __init__(self, nombre, topico, estado=False) -> None:
         self.nombre = nombre
         self.topico = topico
+        self.estado = estado
 
-enchufes = [Enchufe("Solid", "cmnd/hfeasy_8FB78C/POWER")]
+enchufes = [Enchufe("Solid", "cmnd/hfeasy_8FB78C/POWER", False)]
 
 NAME, TOPIC = range(2)
 
@@ -109,12 +113,10 @@ async def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
 
-    # Handle button callback data
     if query.data == 'enchufes':
         botones_enchufes = [[InlineKeyboardButton(enchufe.nombre, callback_data="enchufe " + enchufe.nombre + " " + enchufe.topico)] for enchufe in enchufes]
         botones_enchufes.append(btn_menu)
         botones_enchufes_markup = InlineKeyboardMarkup(botones_enchufes)
-
         await query.edit_message_text('Elegí un enchufe:', reply_markup=botones_enchufes_markup)
     elif query.data == "menu":
         await query.edit_message_text('Menu', reply_markup=menu_markup)
@@ -127,22 +129,35 @@ async def button(update: Update, context: CallbackContext) -> None:
         botones_estado = [
             [InlineKeyboardButton("Prender", callback_data='on ' + topico)],
             [InlineKeyboardButton("Apagar", callback_data='off ' + topico)],
+            [InlineKeyboardButton("Ver estado", callback_data='state ' + topico)],
             btn_menu
         ]
         botones_estado_markup = InlineKeyboardMarkup(botones_estado)
-
         await query.edit_message_text("Nombre: " + nombre + '\n\nTopico: ' + topico, reply_markup=botones_estado_markup)
-
     elif query.data.startswith('on'):
         topico = query.data.split(' ')[1]
-        
-        mqtt_client.subscribe(topico, 0)
         mqtt_client.publish(topico, "ON")
+        for enchufe in enchufes:
+            if enchufe.topico == topico:
+                enchufe.estado = True
+
     elif query.data.startswith('off'):
         topico = query.data.split(' ')[1]
-
-        mqtt_client.subscribe(topico, 0)
         mqtt_client.publish(topico, "OFF")
+        for enchufe in enchufes:
+            if enchufe.topico == topico:
+                enchufe.estado = False
+
+    elif query.data.startswith('state'):
+        topico = query.data.split(' ')[1]
+        for enchufe in enchufes:
+            if enchufe.topico == topico:
+                estado_texto = enchufe.estado
+                await query.message.reply_text(f"El estado del enchufe es: {estado_texto}")
+                break
+
+        
+
 
 
 # Function to handle Telegram /send command

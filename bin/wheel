@@ -1,6 +1,4 @@
-#!/bin/sh
-'''exec' "/home/noanda/Descargas/MQTTClientPythonTelegram 1/bin/python" "$0" "$@"
-' '''
+#!/home/noanda/Escritorio/Solid/MQTTClientPythonTelegram-Dise-obot/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

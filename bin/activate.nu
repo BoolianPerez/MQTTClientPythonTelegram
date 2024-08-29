@@ -32,7 +32,7 @@ export-env {
       }
     }
 
-    let virtual_env = '/home/noanda/Descargas/MQTTClientPythonTelegram 1'
+    let virtual_env = '/home/noanda/Escritorio/Solid/MQTTClientPythonTelegram-Dise-obot'
     let bin = 'bin'
 
     let is_windows = ($nu.os-info.family) == 'windows'

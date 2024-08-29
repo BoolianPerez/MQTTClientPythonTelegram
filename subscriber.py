@@ -152,7 +152,10 @@ async def button(update: Update, context: CallbackContext) -> None:
         topico = query.data.split(' ')[1]
         for enchufe in enchufes:
             if enchufe.topico == topico:
-                estado_texto = enchufe.estado
+                if enchufe.estado == False: 
+                    estado_texto = "Apagado" 
+                else: 
+                    estado_texto = "Prendido"
                 await query.message.reply_text(f"El estado del enchufe es: {estado_texto}")
                 break
 

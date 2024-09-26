@@ -1,4 +1,4 @@
-#!/home/noanda/Escritorio/Solid/MQTTClientPythonTelegram-Dise-obot/bin/python
+#!/home/noanda/MQTTClientPythonTelegram/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

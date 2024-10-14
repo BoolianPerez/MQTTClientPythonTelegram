@@ -4,32 +4,82 @@ import paho.mqtt.client as paho
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, MenuButtonCommands, Update
 from telegram.ext import ConversationHandler, CallbackQueryHandler, Application, CommandHandler, MessageHandler, filters, CallbackContext
 import logging
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+import json
 
-# Configura el registro de eventos
 logging.basicConfig(level=logging.INFO)
 
-# MQTT configuration
-MQTT_BROKER = "172.16.4.232"
+class Enchufe:
+    def __init__(self, nombre, topico, estado=False):
+        self.nombre = nombre
+        self.topico = topico
+        self.estado = estado
+
+# Global consts:
 MQTT_PORT = 1883
-MQTT_USERNAME = "beans"  # Añade tu nombre de usuario aquí
-MQTT_PASSWORD = "rango"  # Añade tu contraseña aquí
+
+# Global variables for mem allocation
 mqtt_topic_subscribe = "hfeasy_8FB78C"
-MQTT_TOPIC_PUBLISH = ""                                                                                                               
-
-# Telegram Bot token
-TELEGRAM_BOT_TOKEN = "7484892111:AAFJoYCk66dzNE7gB-l0QQEXTXS1z6R5o28"
-
-# Global variables
 chat_id = None
 application = None
+enchufes = []
+NAME, TOPIC, EDITNAME, EDITTOPIC, DELETE = range(5)
+topicos = []
+MQTT_BROKER = ""
+MQTT_USERNAME = ""
+MQTT_PASSWORD = ""
+TELEGRAM_BOT_TOKEN = ""
 
-# Create an event loop for async operations
+# Setup menu
+btn_menu = [InlineKeyboardButton("Menu principal", callback_data='menu')]
+menu = [
+    [InlineKeyboardButton("Elegir enchufe", callback_data='enchufes')],
+    [InlineKeyboardButton("Agregar enchufe", callback_data='agregar')],
+    [InlineKeyboardButton("Editar enchufe", callback_data='editar')],
+    [InlineKeyboardButton("Eliminar enchufe", callback_data='eliminar')],
+]
+menu_markup = InlineKeyboardMarkup(menu)
+
+# Async
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
-topicos = []
+mqtt_client = paho.Client()
 
-# Function to handle incoming MQTT messages
+def guardar_enchufes(enchufes, filename='enchufes.json'):
+    with open(filename, 'w') as f:
+        json.dump([enchufe.__dict__ for enchufe in enchufes], f)
+
+def cargar_enchufes(filename='enchufes.json'):
+    try:
+        with open(filename, 'r') as f:
+            enchufes_data = json.load(f)
+            return [Enchufe(**data) for data in enchufes_data]
+    except FileNotFoundError:
+        return []
+    
+enchufes = cargar_enchufes()
+
+async def mostrar_enchufes(update: Update, context: CallbackContext) -> int:
+    keyboard = [[InlineKeyboardButton(enchufe.nombre, callback_data=enchufe.nombre)] for enchufe in enchufes]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if update.message:
+        await update.message.reply_text("Selecciona el enchufe que deseas editar:", reply_markup=reply_markup)
+    elif update.callback_query:
+        await update.callback_query.message.reply_text("Selecciona el enchufe que deseas editar:", reply_markup=reply_markup)
+    
+    return EDITNAME
+    
+async def seleccionar_enchufe(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data['nombre'] = query.data
+    await query.edit_message_text(f"Enchufe seleccionado: {query.data}. Ahora ingresa el nuevo tópico MQTT del enchufe:")
+    return EDITTOPIC
+
+
 def on_message(client, userdata, msg):
     print(msg.topic)
     print(msg.payload.decode('utf-8'))
@@ -42,42 +92,13 @@ def on_message(client, userdata, msg):
             enchufe.estado = msg.payload.decode('utf-8').strip() == "ON"
             break
 
-# MQTT Client setup
-mqtt_client = paho.Client()
-
-# Establecer credenciales de autenticación
-mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-
-mqtt_client.on_message = on_message
-mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
-mqtt_client.subscribe(mqtt_topic_subscribe, 0)
-
-btn_menu = [InlineKeyboardButton("Menu principal", callback_data='menu')]
-
-menu = [
-    [InlineKeyboardButton("Elegir enchufe", callback_data='enchufes')],
-    [InlineKeyboardButton("Agregar enchufe", callback_data='agregar')],
-]
-menu_markup = InlineKeyboardMarkup(menu)
-
 # Function to handle Telegram /start command
 async def start(update: Update, context: CallbackContext) -> None:
-    print(3232)
     global chat_id
     chat_id = update.message.chat_id
+    print(menu_markup)
     await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-
     await update.message.reply_text('Menu', reply_markup=menu_markup)
-
-class Enchufe:
-    def __init__(self, nombre, topico, estado=False) -> None:
-        self.nombre = nombre
-        self.topico = topico
-        self.estado = estado
-
-enchufes = [Enchufe("Solid", "cmnd/hfeasy_8FB78C/POWER", False)]
-
-NAME, TOPIC = range(2)
 
 async def agregar(update: Update, context: CallbackContext) -> int:
     query = update.callback_query
@@ -94,11 +115,48 @@ async def agregar_nombre(update: Update, context: CallbackContext) -> int:
 
 async def agregar_topico(update: Update, context: CallbackContext) -> int:
     nombre = context.user_data.get('nombre')
-    topico = update.message.text
+    topico = "cmnd/" + update.message.text + "/POWER"
 
-    enchufes.append(Enchufe(nombre, topico))
+    enchufe = Enchufe(nombre, topico)
+    enchufes.append(enchufe)
+    guardar_enchufes(enchufes)
 
     await update.message.reply_text(f"Enchufe '{nombre}' con tópico '{topico}' ha sido agregado.", reply_markup=menu_markup)
+    
+    await update.message.reply_text('Menu', reply_markup=menu_markup)
+
+    context.user_data['state'] = None
+    return ConversationHandler.END
+
+async def editar(update: Update, context: CallbackContext) -> int:
+    query = update.callback_query
+    await query.answer()
+    await mostrar_enchufes(update, context)
+    return EDITNAME
+
+async def editar_nombre(update: Update, context: CallbackContext) -> int:
+    context.user_data['nombre'] = update.message.text
+    await update.message.reply_text("Ahora ingresa el tópico MQTT del enchufe:")
+
+    return EDITTOPIC
+
+async def editar_topico(update: Update, context: CallbackContext) -> int:
+    nombre = context.user_data.get('nombre')
+    topico = "cmnd/" + update.message.text + "/POWER"
+
+    # Buscar el enchufe existente y actualizarlo
+    for enchufe in enchufes:
+        if enchufe.nombre == nombre:
+            enchufe.topico = topico
+            break
+    else:
+        # Si no se encuentra, agregar uno nuevo
+        enchufe = Enchufe(nombre, topico)
+        enchufes.append(enchufe)
+
+    guardar_enchufes(enchufes)
+
+    await update.message.reply_text(f"Enchufe '{nombre}' con tópico '{topico}' ha sido actualizado.", reply_markup=menu_markup)
     
     await update.message.reply_text('Menu', reply_markup=menu_markup)
 
@@ -110,9 +168,9 @@ async def cancelar(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 async def button(update: Update, context: CallbackContext) -> None:
+    global enchufes
     query = update.callback_query
     await query.answer()
-
     if query.data == 'enchufes':
         botones_enchufes = [[InlineKeyboardButton(enchufe.nombre, callback_data="enchufe " + enchufe.nombre + " " + enchufe.topico)] for enchufe in enchufes]
         botones_enchufes.append(btn_menu)
@@ -122,10 +180,25 @@ async def button(update: Update, context: CallbackContext) -> None:
         await query.edit_message_text('Menu', reply_markup=menu_markup)
     elif query.data == "agregar":
         await agregar(update, context)
-    elif query.data.startswith("enchufe"):
+    elif query.data == "editar":
+        botones_enchufes = [[InlineKeyboardButton(enchufe.nombre, callback_data="editar_enchufe " + enchufe.nombre)] for enchufe in enchufes]
+        botones_enchufes.append(btn_menu)
+        botones_enchufes_markup = InlineKeyboardMarkup(botones_enchufes)
+        await query.edit_message_text('Selecciona el enchufe a editar:', reply_markup=botones_enchufes_markup)
+    elif query.data == "eliminar":
+        await eliminar(update, context)
+    elif query.data.startswith("eliminar_enchufe"):
         nombre = query.data.split(' ')[1]
-        topico = query.data.split(' ')[2]
-
+        enchufes = [enchufe for enchufe in enchufes if enchufe.nombre != nombre]
+        guardar_enchufes(enchufes)
+        await query.edit_message_text(f"Enchufe '{nombre}' eliminado.")
+    elif query.data.startswith("editar_enchufe"):
+        nombre = query.data.split(' ')[1]
+        context.user_data['nombre_a_editar'] = nombre
+        await query.edit_message_text(f"Ingrese el nuevo nombre para el enchufe '{nombre}':")
+        return EDITNAME
+    elif query.data.startswith("enchufe"):
+        nombre, topico = query.data.split(' ')[1:]
         botones_estado = [
             [InlineKeyboardButton("Prender", callback_data='on ' + topico)],
             [InlineKeyboardButton("Apagar", callback_data='off ' + topico)],
@@ -140,28 +213,21 @@ async def button(update: Update, context: CallbackContext) -> None:
         for enchufe in enchufes:
             if enchufe.topico == topico:
                 enchufe.estado = True
-
+        guardar_enchufes(enchufes)
     elif query.data.startswith('off'):
         topico = query.data.split(' ')[1]
         mqtt_client.publish(topico, "OFF")
         for enchufe in enchufes:
             if enchufe.topico == topico:
                 enchufe.estado = False
-
+        guardar_enchufes(enchufes)
     elif query.data.startswith('state'):
         topico = query.data.split(' ')[1]
         for enchufe in enchufes:
             if enchufe.topico == topico:
-                if enchufe.estado == False: 
-                    estado_texto = "Apagado" 
-                else: 
-                    estado_texto = "Prendido"
+                estado_texto = "Prendido" if enchufe.estado else "Apagado"
                 await query.message.reply_text(f"El estado del enchufe es: {estado_texto}")
                 break
-
-        
-
-
 
 # Function to handle Telegram /send command
 async def send(update: Update, context: CallbackContext) -> None:
@@ -175,6 +241,23 @@ async def send(update: Update, context: CallbackContext) -> None:
         logging.info(f"Sent message to MQTT: {message}")
     else:
         await update.message.reply_text("Usage: /send <message>")
+
+async def delete(update: Update, context: CallbackContext) -> int:
+    enchufe_a_eliminar = update.message.text
+    global enchufes
+    enchufes = [enchufe for enchufe in enchufes if enchufe.nombre != enchufe_a_eliminar]
+    guardar_enchufes(enchufes)
+    await update.message.reply_text(f"Enchufe '{enchufe_a_eliminar}' eliminado.")
+    return ConversationHandler.END
+
+async def eliminar(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
+    botones_enchufes = [[InlineKeyboardButton(enchufe.nombre, callback_data="eliminar_enchufe " + enchufe.nombre)] for enchufe in enchufes]
+    botones_enchufes.append(btn_menu)
+    botones_enchufes_markup = InlineKeyboardMarkup(botones_enchufes)
+    await query.edit_message_text('Selecciona el enchufe a eliminar:', reply_markup=botones_enchufes_markup)
+
 
 # Function to handle Telegram /receive command
 async def receive(update: Update, context: CallbackContext) -> None:
@@ -224,35 +307,104 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     message = update.message.text
     logging.info(f"Received message: {message}")
 
-# Set up the Telegram bot
-application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+# GUI Function to get inputs
+def start_gui():
+    global MQTT_BROKER, MQTT_USERNAME, MQTT_PASSWORD, TELEGRAM_BOT_TOKEN
+    global broker_entry
 
-# Add command handlers to the application
-conv_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(agregar, pattern='^agregar$')],
-    states={
-        NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, agregar_nombre)],
-        TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, agregar_topico)],
-    },
-    fallbacks=[CommandHandler("cancelar", cancelar)],
-)
+    # Create the main window
+    root = tk.Tk()
+    root.title("MQTT and Telegram Config")
 
-# Add the conversation handler to the application
-application.add_handler(conv_handler)
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("send", send))
-application.add_handler(CommandHandler("receive", receive))
-application.add_handler(CommandHandler("chatid", chatid))
-application.add_handler(CommandHandler("topic", topic))
-application.add_handler(CommandHandler("subscribe", subscribe))
-application.add_handler(CommandHandler("unsubscribe", unsubscribe))
-application.add_handler(CallbackQueryHandler(button))
+    def start_bot():
+        global MQTT_BROKER, MQTT_USERNAME, MQTT_PASSWORD, TELEGRAM_BOT_TOKEN, application
+        MQTT_BROKER = broker_entry.get()
+        MQTT_USERNAME = username_entry.get()
+        MQTT_PASSWORD = password_entry.get()
+        TELEGRAM_BOT_TOKEN = token_entry.get()
+        config = {
+            "MQTT_BROKER": MQTT_BROKER,
+            "MQTT_USERNAME": MQTT_USERNAME,
+            "MQTT_PASSWORD": MQTT_PASSWORD,
+            "TELEGRAM_BOT_TOKEN": TELEGRAM_BOT_TOKEN
+        }
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
+        root.destroy()
+        # Check for empty inputs
+        if not all([MQTT_BROKER, MQTT_USERNAME, MQTT_PASSWORD, TELEGRAM_BOT_TOKEN]):
+            messagebox.showerror("Input Error", "Please fill all fields.")
+            return
+        # Setup MQTT Client
+        mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        mqtt_client.on_message = on_message
+        mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        mqtt_client.subscribe(mqtt_topic_subscribe, 0)
+        # Create Telegram bot application
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        agregar_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(agregar, pattern='^agregar$')],
+            states={
+                NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, agregar_nombre)],
+                TOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, agregar_topico)],
+            },
+            fallbacks=[CommandHandler("cancelar", cancelar)],
+        )
+        edit_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(editar, pattern='^editar$')],
+            states={
+                EDITNAME: [CallbackQueryHandler(seleccionar_enchufe)],
+                EDITTOPIC: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_topico)],
+            },
+            fallbacks=[CommandHandler('cancelar', cancelar)],
+        )
 
-# Add a handler for all text messages
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        # Start MQTT loop and Telegram bot
+        mqtt_client.loop_start()
+        application.add_handler(agregar_handler)
+        application.add_handler(edit_handler)
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CallbackQueryHandler(button))
+        application.add_handler(CommandHandler("send", send))
+        application.add_handler(CommandHandler("receive", receive))
+        application.add_handler(CommandHandler("chatid", chatid))
+        application.add_handler(CommandHandler("topic", topic))
+        application.add_handler(CommandHandler("subscribe", subscribe))
+        application.add_handler(CommandHandler("unsubscribe", unsubscribe))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        # Ensure the application is running
+        loop.run_until_complete(application.run_polling())
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+            MQTT_BROKER = config.get("MQTT_BROKER", "")
+            MQTT_USERNAME = config.get("MQTT_USERNAME", "")
+            MQTT_PASSWORD = config.get("MQTT_PASSWORD", "")
+            TELEGRAM_BOT_TOKEN = config.get("TELEGRAM_BOT_TOKEN", "")
+    except FileNotFoundError:
+        pass
 
-# Start the MQTT loop
-mqtt_client.loop_start()
+    # Create labels and entries for user inputs
+    tk.Label(root, text="MQTT Broker:").pack()
+    broker_entry = tk.Entry(root)
+    broker_entry.pack()
 
-# Start the Telegram bot
-application.run_polling()
+    tk.Label(root, text="MQTT Username:").pack()
+    username_entry = tk.Entry(root)
+    username_entry.pack()
+
+    tk.Label(root, text="MQTT Password:").pack()
+    password_entry = tk.Entry(root, show="*")
+    password_entry.pack()
+
+    tk.Label(root, text="Telegram Bot Token:").pack()
+    token_entry = tk.Entry(root)
+    token_entry.pack()
+
+    # Start button
+    start_button = tk.Button(root, text="Start Bot", command=start_bot)
+    start_button.pack()
+
+    root.mainloop()
+    start_bot()
+start_gui()

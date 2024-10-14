@@ -9,7 +9,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 # MQTT configuration
-MQTT_BROKER = "172.16.4.251"
+MQTT_BROKER = "172.16.4.232"
 MQTT_PORT = 1883
 MQTT_USERNAME = "beans"  # Añade tu nombre de usuario aquí
 MQTT_PASSWORD = "rango"  # Añade tu contraseña aquí
@@ -17,7 +17,7 @@ mqtt_topic_subscribe = "hfeasy_8FB78C"
 MQTT_TOPIC_PUBLISH = ""                                                                                                               
 
 # Telegram Bot token
-TELEGRAM_BOT_TOKEN = ""
+TELEGRAM_BOT_TOKEN = "7484892111:AAFJoYCk66dzNE7gB-l0QQEXTXS1z6R5o28"
 
 # Global variables
 chat_id = None

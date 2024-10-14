@@ -1,4 +1,6 @@
-#!/home/noanda/Escritorio/Solid/MQTTClientPythonTelegram-Dise-obot/bin/python
+#!/bin/sh
+'''exec' "/home/noanda/Escritorio/Nueva carpeta/MQTTClientPythonTelegram/bin/python" "$0" "$@"
+' '''
 # -*- coding: utf-8 -*-
 import re
 import sys

@@ -1,4 +1,4 @@
-#!/home/luna/MQTTClientPythonTelegram/bin/python
+#!/home/noanda/Escritorio/MQTTClientPythonTelegram/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

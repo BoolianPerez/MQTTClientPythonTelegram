@@ -44,19 +44,7 @@ source bin/activate
 pip install -r requirements.txt
 pip install python-telegram-bot
 
+##Execute the server
+./server.py
 
-## Test the subscriber example
-First start the subscriber which will enter a loop waiting for new messages:
-
-    ./subscriber.py
-
-Then open a new terminal and send a message:
-
-    mosquitto_pub -d -h localhost -q 0 -t adult/pics -m "can i haz moar kittenz"
-
-This should generate a message in the terminal running the subscriber.
-
-Take a look at **publisher.py** to see how to publish messages using python. Or just open another terminal and run it from command line while **subscriber.py** is running:
-
-    source bin/activate
-    ./publisher.py
+input the data and control it in Telegram
